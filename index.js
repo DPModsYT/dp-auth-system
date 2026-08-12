@@ -8,7 +8,6 @@ const PORT = process.env.PORT || 3000;
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // 🟢 MULTIPLE ADMINS SETUP 🟢
-// Render में ADMIN_ID ऐसे डालें: 12345678, 87654321
 const ADMIN_IDS = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',').map(id => id.trim()) : [];
 const GROUP_ID = process.env.GROUP_ID; 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -22,7 +21,7 @@ function isAdmin(ctx) {
     if (ADMIN_IDS.includes(ctx.from.id.toString())) {
         return true;
     } else {
-        ctx.reply("❌ You are not the admin of this bot!").catch(e => console.log(e));
+        ctx.reply("❌ *You are not authorized to use this panel!*", { parse_mode: 'Markdown' }).catch(e => console.log(e));
         return false;
     }
 }
@@ -60,7 +59,7 @@ app.get('/api/request', async (req, res) => {
         await saveToGitHub();
     }
     
-    const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Quick Commands:*\n\`/approve ${hwid} 30\`\n\`/ban ${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Quick Commands:*\n\`/approve ${hwid} 30\`\n\`/ban ${hwid}\`\n\`/remove ${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
     
     bot.telegram.sendMessage(GROUP_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Send Error:", e.message));
     res.send("Requested");
@@ -70,23 +69,45 @@ app.get('/api/request', async (req, res) => {
 // 🤖 TELEGRAM BOT COMMANDS
 // ==========================================
 
+// 1. HELP COMMAND
+bot.command('help', (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const helpMsg = `🛠 *PANEL BOT COMMANDS* 🛠\n\n`
+        + `🟢 */approve <HWID> <Days>* - Approve a device\n`
+        + `🔴 */ban <HWID>* - Ban a device permanently\n`
+        + `🗑 */remove <HWID>* - Delete device completely\n`
+        + `📱 */devices* - View all registered devices\n`
+        + `⚙️ */settings* - View current panel settings\n`
+        + `✏️ */settings title <text>* - Change panel title\n`
+        + `✏️ */settings sub <text>* - Change panel subtitle\n`
+        + `🛠 */maintenance* - Toggle maintenance mode ON/OFF\n\n`
+        + `_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    ctx.reply(helpMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+});
+
+// 2. DEVICES COMMAND
 bot.command('devices', async (ctx) => {
-    if (!isAdmin(ctx)) return; // Admin Check
+    if (!isAdmin(ctx)) return; 
     
     await syncFromGitHub();
     let msg = "📱 *Registered Devices:*\n\n";
+    let count = 0;
     for (let id in db.devices) { 
         msg += `\`${id}\` : ${db.devices[id].status.toUpperCase()}\n`; 
+        count++;
     }
+    if (count === 0) msg += "No devices found in database.\n";
+    
     msg += "\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_";
     ctx.reply(msg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
+// 3. APPROVE COMMAND
 bot.command('approve', async (ctx) => {
-    if (!isAdmin(ctx)) return; // Admin Check
+    if (!isAdmin(ctx)) return; 
     
     const args = ctx.message.text.split(' ');
-    if (args.length < 3) return ctx.reply("Usage: /approve <HWID> <Days>");
+    if (args.length < 3) return ctx.reply("ℹ️ *Usage:* `/approve <HWID> <Days>`\n_Example: /approve 87d7ea... 30_", { parse_mode: 'Markdown' });
     
     await syncFromGitHub();
     const hwid = args[1];
@@ -101,11 +122,12 @@ bot.command('approve', async (ctx) => {
     ctx.reply(successMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
+// 4. BAN COMMAND
 bot.command('ban', async (ctx) => {
-    if (!isAdmin(ctx)) return; // Admin Check
+    if (!isAdmin(ctx)) return; 
     
     const hwid = ctx.message.text.split(' ')[1];
-    if (!hwid) return ctx.reply("Usage: /ban <HWID>");
+    if (!hwid) return ctx.reply("ℹ️ *Usage:* `/ban <HWID>`", { parse_mode: 'Markdown' });
     
     await syncFromGitHub();
     if (!db.devices[hwid]) db.devices[hwid] = {};
@@ -116,14 +138,44 @@ bot.command('ban', async (ctx) => {
     ctx.reply(banMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// Supports both /settings and /setting
-bot.command(['settings', 'setting'], async (ctx) => {
-    if (!isAdmin(ctx)) return; // Admin Check
+// 5. REMOVE COMMAND (NEW)
+bot.command('remove', async (ctx) => {
+    if (!isAdmin(ctx)) return; 
     
-    const args = ctx.message.text.split(' ');
-    if (args.length < 3) return ctx.reply("Usage: /settings <title/sub> <text>");
+    const hwid = ctx.message.text.split(' ')[1];
+    if (!hwid) return ctx.reply("ℹ️ *Usage:* `/remove <HWID>`", { parse_mode: 'Markdown' });
     
     await syncFromGitHub();
+    
+    if (db.devices[hwid]) {
+        delete db.devices[hwid]; // यह JSON से डिवाइस को उड़ा देगा
+        await saveToGitHub();
+        const removeMsg = `🗑 *REMOVED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\` has been deleted from the database.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+        ctx.reply(removeMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    } else {
+        ctx.reply(`⚠️ *Device Not Found:*\n\`${hwid}\` is not in the database.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    }
+});
+
+// 6. SMART SETTINGS COMMAND (UPDATED)
+bot.command(['settings', 'setting'], async (ctx) => {
+    if (!isAdmin(ctx)) return; 
+    await syncFromGitHub();
+    const args = ctx.message.text.split(' ');
+    
+    // अगर सिर्फ "/settings" टाइप किया है
+    if (args.length === 1) {
+        const currentSettings = `⚙️ *CURRENT SETTINGS*\n\n`
+            + `*Title:* ${db.settings.title || 'N/A'}\n`
+            + `*Subtitle:* ${db.settings.subtitle || 'N/A'}\n`
+            + `*Maintenance:* ${db.settings.maintenance ? 'ON 🔴' : 'OFF 🟢'}\n\n`
+            + `_To change settings, use:_\n\`/settings title <New Title>\`\n\`/settings sub <New Subtitle>\`\n\n`
+            + `_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+        return ctx.reply(currentSettings, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    }
+
+    if (args.length < 3) return ctx.reply("ℹ️ *Usage:* `/settings title <text>` OR `/settings sub <text>`", { parse_mode: 'Markdown' });
+    
     const key = args[1].toLowerCase();
     const val = args.slice(2).join(' ');
     
@@ -134,6 +186,15 @@ bot.command(['settings', 'setting'], async (ctx) => {
     await saveToGitHub();
     const setMsg = `✅ *Setting Updated!*\n*${key.toUpperCase()}:* ${val}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
     ctx.reply(setMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+});
+
+// 7. MAINTENANCE COMMAND
+bot.command('maintenance', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    await syncFromGitHub();
+    db.settings.maintenance = !db.settings.maintenance;
+    await saveToGitHub();
+    ctx.reply(`🛠 *Maintenance Mode is now:* ${db.settings.maintenance ? 'ON 🔴' : 'OFF 🟢'}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
 // Start the server and bot
