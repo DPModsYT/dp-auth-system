@@ -16,6 +16,10 @@
     "another_device_here": {
       "status": "pending",
       "expiry": 0
+    },
+    "87d7ea7faf897f9f": {
+      "status": "pending",
+      "expiry": 0
     }
   }
 }
