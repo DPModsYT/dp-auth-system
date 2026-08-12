@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "title": "SYSTEM ACCESS",
+    "subtitle": "Click below to request admin approval.",
+    "maintenance": false,
+    "banned_devices": [
+      "hacker_hwid_1",
+      "hacker_hwid_2"
+    ]
+  },
+  "devices": {
+    "your_device_hwid_here": {
+      "status": "approved",
+      "expiry": 1893456000
+    },
+    "another_device_here": {
+      "status": "pending",
+      "expiry": 0
+    }
+  }
+}
