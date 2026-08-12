@@ -16,17 +16,12 @@ const GITHUB_REPO = process.env.GITHUB_REPO;
 let db = { settings: {}, devices: {} };
 let ghSha = "";
 
-// 🟢 ADMIN CHECKER FUNCTION 🟢
 function isAdmin(ctx) {
-    if (ADMIN_IDS.includes(ctx.from.id.toString())) {
-        return true;
-    } else {
-        ctx.reply("❌ *You are not authorized to use this panel!*", { parse_mode: 'Markdown' }).catch(e => console.log(e));
-        return false;
-    }
+    if (ADMIN_IDS.includes(ctx.from.id.toString())) return true;
+    ctx.reply("❌ *You are not authorized to use this panel!*", { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    return false;
 }
 
-// GitHub से डेटाबेस सिंक करना
 async function syncFromGitHub() {
     try {
         const res = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/contents/database.json`, {
@@ -37,7 +32,6 @@ async function syncFromGitHub() {
     } catch (e) { console.log("GitHub Load Error"); }
 }
 
-// GitHub पर डेटाबेस सेव करना
 async function saveToGitHub() {
     try {
         const content = Buffer.from(JSON.stringify(db, null, 2)).toString('base64');
@@ -48,7 +42,11 @@ async function saveToGitHub() {
     } catch (e) { console.log("GitHub Save Error"); }
 }
 
-// Android ऐप से रिक्वेस्ट रिसीव करना
+// 🚀 INSTANT DATABASE API (Bypasses GitHub's 5-minute cache perfectly) 🚀
+app.get('/api/database', (req, res) => {
+    res.json(db);
+});
+
 app.get('/api/request', async (req, res) => {
     const hwid = req.query.hwid;
     if (!hwid) return res.status(400).send("No HWID");
@@ -60,7 +58,6 @@ app.get('/api/request', async (req, res) => {
     }
     
     const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Quick Commands:*\n\`/approve ${hwid} 30\`\n\`/ban ${hwid}\`\n\`/remove ${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
-    
     bot.telegram.sendMessage(GROUP_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Send Error:", e.message));
     res.send("Requested");
 });
@@ -69,26 +66,23 @@ app.get('/api/request', async (req, res) => {
 // 🤖 TELEGRAM BOT COMMANDS
 // ==========================================
 
-// 1. HELP COMMAND
 bot.command('help', (ctx) => {
     if (!isAdmin(ctx)) return;
     const helpMsg = `🛠 *PANEL BOT COMMANDS* 🛠\n\n`
-        + `🟢 */approve <HWID> <Days>* - Approve a device\n`
-        + `🔴 */ban <HWID>* - Ban a device permanently\n`
+        + `🟢 */approve <HWID> <Days>* - Approve device\n`
+        + `🔴 */ban <HWID>* - Ban device permanently\n`
         + `🗑 */remove <HWID>* - Delete device completely\n`
-        + `📱 */devices* - View all registered devices\n`
+        + `📱 */devices* - View registered devices\n`
         + `⚙️ */settings* - View current panel settings\n`
-        + `✏️ */settings title <text>* - Change panel title\n`
-        + `✏️ */settings sub <text>* - Change panel subtitle\n`
-        + `🛠 */maintenance* - Toggle maintenance mode ON/OFF\n\n`
+        + `✏️ */settings title <text>* - Change title\n`
+        + `✏️ */settings sub <text>* - Change subtitle\n`
+        + `🛠 */maintenance* - Toggle maintenance ON/OFF\n\n`
         + `_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
     ctx.reply(helpMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// 2. DEVICES COMMAND
 bot.command('devices', async (ctx) => {
     if (!isAdmin(ctx)) return; 
-    
     await syncFromGitHub();
     let msg = "📱 *Registered Devices:*\n\n";
     let count = 0;
@@ -96,18 +90,15 @@ bot.command('devices', async (ctx) => {
         msg += `\`${id}\` : ${db.devices[id].status.toUpperCase()}\n`; 
         count++;
     }
-    if (count === 0) msg += "No devices found in database.\n";
-    
+    if (count === 0) msg += "No devices found.\n";
     msg += "\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_";
     ctx.reply(msg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// 3. APPROVE COMMAND
 bot.command('approve', async (ctx) => {
     if (!isAdmin(ctx)) return; 
-    
     const args = ctx.message.text.split(' ');
-    if (args.length < 3) return ctx.reply("ℹ️ *Usage:* `/approve <HWID> <Days>`\n_Example: /approve 87d7ea... 30_", { parse_mode: 'Markdown' });
+    if (args.length < 3) return ctx.reply("ℹ️ *Usage:* `/approve <HWID> <Days>`", { parse_mode: 'Markdown' });
     
     await syncFromGitHub();
     const hwid = args[1];
@@ -117,15 +108,11 @@ bot.command('approve', async (ctx) => {
     if (!db.devices[hwid]) db.devices[hwid] = {};
     db.devices[hwid] = { status: "approved", expiry: expiry };
     await saveToGitHub();
-    
-    const successMsg = `✅ *SUCCESSFULLY APPROVED!*\n\n*HWID:* \`${hwid}\`\n*Duration:* ${days} Days\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
-    ctx.reply(successMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    ctx.reply(`✅ *SUCCESSFULLY APPROVED!*\n\n*HWID:* \`${hwid}\`\n*Duration:* ${days} Days\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// 4. BAN COMMAND
 bot.command('ban', async (ctx) => {
     if (!isAdmin(ctx)) return; 
-    
     const hwid = ctx.message.text.split(' ')[1];
     if (!hwid) return ctx.reply("ℹ️ *Usage:* `/ban <HWID>`", { parse_mode: 'Markdown' });
     
@@ -133,49 +120,39 @@ bot.command('ban', async (ctx) => {
     if (!db.devices[hwid]) db.devices[hwid] = {};
     db.devices[hwid] = { status: "banned", expiry: 0 };
     await saveToGitHub();
-    
-    const banMsg = `🚫 *BANNED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
-    ctx.reply(banMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    ctx.reply(`🚫 *BANNED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// 5. REMOVE COMMAND (NEW)
 bot.command('remove', async (ctx) => {
     if (!isAdmin(ctx)) return; 
-    
     const hwid = ctx.message.text.split(' ')[1];
     if (!hwid) return ctx.reply("ℹ️ *Usage:* `/remove <HWID>`", { parse_mode: 'Markdown' });
     
     await syncFromGitHub();
-    
     if (db.devices[hwid]) {
-        delete db.devices[hwid]; // यह JSON से डिवाइस को उड़ा देगा
+        delete db.devices[hwid]; 
         await saveToGitHub();
-        const removeMsg = `🗑 *REMOVED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\` has been deleted from the database.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
-        ctx.reply(removeMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+        ctx.reply(`🗑 *REMOVED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\` has been deleted.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
     } else {
-        ctx.reply(`⚠️ *Device Not Found:*\n\`${hwid}\` is not in the database.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+        ctx.reply(`⚠️ *Device Not Found*\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
     }
 });
 
-// 6. SMART SETTINGS COMMAND (UPDATED)
 bot.command(['settings', 'setting'], async (ctx) => {
     if (!isAdmin(ctx)) return; 
     await syncFromGitHub();
     const args = ctx.message.text.split(' ');
     
-    // अगर सिर्फ "/settings" टाइप किया है
     if (args.length === 1) {
         const currentSettings = `⚙️ *CURRENT SETTINGS*\n\n`
             + `*Title:* ${db.settings.title || 'N/A'}\n`
             + `*Subtitle:* ${db.settings.subtitle || 'N/A'}\n`
             + `*Maintenance:* ${db.settings.maintenance ? 'ON 🔴' : 'OFF 🟢'}\n\n`
-            + `_To change settings, use:_\n\`/settings title <New Title>\`\n\`/settings sub <New Subtitle>\`\n\n`
             + `_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
         return ctx.reply(currentSettings, { parse_mode: 'Markdown' }).catch(e => console.log(e));
     }
 
     if (args.length < 3) return ctx.reply("ℹ️ *Usage:* `/settings title <text>` OR `/settings sub <text>`", { parse_mode: 'Markdown' });
-    
     const key = args[1].toLowerCase();
     const val = args.slice(2).join(' ');
     
@@ -184,11 +161,9 @@ bot.command(['settings', 'setting'], async (ctx) => {
     else return ctx.reply("❌ Invalid setting. Use 'title' or 'sub'.");
     
     await saveToGitHub();
-    const setMsg = `✅ *Setting Updated!*\n*${key.toUpperCase()}:* ${val}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
-    ctx.reply(setMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+    ctx.reply(`✅ *Setting Updated!*\n*${key.toUpperCase()}:* ${val}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// 7. MAINTENANCE COMMAND
 bot.command('maintenance', async (ctx) => {
     if (!isAdmin(ctx)) return;
     await syncFromGitHub();
@@ -197,7 +172,6 @@ bot.command('maintenance', async (ctx) => {
     ctx.reply(`🛠 *Maintenance Mode is now:* ${db.settings.maintenance ? 'ON 🔴' : 'OFF 🟢'}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
-// Start the server and bot
 syncFromGitHub().then(() => {
     app.listen(PORT, () => console.log("Server Running..."));
     bot.launch();
