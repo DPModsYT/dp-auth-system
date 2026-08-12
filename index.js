@@ -6,9 +6,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const ADMIN_ID = process.env.ADMIN_ID;
+const ADMIN_ID = process.env.ADMIN_ID; 
+const GROUP_ID = process.env.GROUP_ID; 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO; // Format: Username/RepoName
+const GITHUB_REPO = process.env.GITHUB_REPO;
 
 let db = { settings: {}, devices: {} };
 let ghSha = "";
@@ -35,7 +36,7 @@ async function saveToGitHub() {
     } catch (e) { console.log("GitHub Save Error"); }
 }
 
-// Android ऐप से रिक्वेस्ट रिसीव करना
+// 🟢 Android ऐप से रिक्वेस्ट रिसीव करना 🟢
 app.get('/api/request', async (req, res) => {
     const hwid = req.query.hwid;
     if (!hwid) return res.status(400).send("No HWID");
@@ -46,21 +47,26 @@ app.get('/api/request', async (req, res) => {
         await saveToGitHub();
     }
     
-    const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Commands:*\n/approve ${hwid} 30\n/ban ${hwid}`;
-    bot.telegram.sendMessage(ADMIN_ID, msg, { parse_mode: 'Markdown' });
+    // 🌟 वॉटरमार्क यहाँ ऐड किया गया है 🌟
+    const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Quick Commands:*\n\`/approve ${hwid} 30\`\n\`/ban ${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    
+    bot.telegram.sendMessage(GROUP_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Send Error:", e.message));
     res.send("Requested");
 });
 
 // Telegram Bot Commands
 bot.command('devices', async (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_ID) return;
     await syncFromGitHub();
     let msg = "📱 *Devices:*\n\n";
     for (let id in db.devices) { msg += `\`${id}\` : ${db.devices[id].status}\n`; }
+    msg += "\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_";
     ctx.reply(msg, { parse_mode: 'Markdown' });
 });
 
 bot.command('approve', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return;
+    if (ctx.from.id.toString() !== ADMIN_ID) return; 
+    
     const args = ctx.message.text.split(' ');
     if (args.length < 3) return ctx.reply("Usage: /approve <HWID> <Days>");
     
@@ -72,7 +78,9 @@ bot.command('approve', async (ctx) => {
     if (!db.devices[hwid]) db.devices[hwid] = {};
     db.devices[hwid] = { status: "approved", expiry: expiry };
     await saveToGitHub();
-    ctx.reply(`✅ Approved \`${hwid}\` for ${days} days.`, { parse_mode: 'Markdown' });
+    
+    // 🌟 वॉटरमार्क यहाँ भी ऐड किया गया है 🌟
+    ctx.reply(`✅ Approved \`${hwid}\` for ${days} days.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' });
 });
 
 bot.command('ban', async (ctx) => {
@@ -84,31 +92,9 @@ bot.command('ban', async (ctx) => {
     if (!db.devices[hwid]) db.devices[hwid] = {};
     db.devices[hwid] = { status: "banned", expiry: 0 };
     await saveToGitHub();
-    ctx.reply(`🚫 Banned: \`${hwid}\``, { parse_mode: 'Markdown' });
-});
-
-bot.command('settings', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return;
-    const args = ctx.message.text.split(' ');
-    if (args.length < 3) return ctx.reply("Usage: /settings <title/sub> <text>");
     
-    await syncFromGitHub();
-    const key = args[1];
-    const val = args.slice(2).join(' ');
-    
-    if (key === 'title') db.settings.title = val;
-    else if (key === 'sub') db.settings.subtitle = val;
-    
-    await saveToGitHub();
-    ctx.reply(`✅ Setting Updated.`);
-});
-
-bot.command('maintenance', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return;
-    await syncFromGitHub();
-    db.settings.maintenance = !db.settings.maintenance;
-    await saveToGitHub();
-    ctx.reply(`🛠 Maintenance is now: ${db.settings.maintenance ? 'ON' : 'OFF'}`);
+    // 🌟 वॉटरमार्क यहाँ भी ऐड किया गया है 🌟
+    ctx.reply(`🚫 Banned: \`${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' });
 });
 
 syncFromGitHub().then(() => {
