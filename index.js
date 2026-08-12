@@ -6,13 +6,26 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const ADMIN_ID = process.env.ADMIN_ID; 
+
+// 🟢 MULTIPLE ADMINS SETUP 🟢
+// Render में ADMIN_ID ऐसे डालें: 12345678, 87654321
+const ADMIN_IDS = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',').map(id => id.trim()) : [];
 const GROUP_ID = process.env.GROUP_ID; 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 
 let db = { settings: {}, devices: {} };
 let ghSha = "";
+
+// 🟢 ADMIN CHECKER FUNCTION 🟢
+function isAdmin(ctx) {
+    if (ADMIN_IDS.includes(ctx.from.id.toString())) {
+        return true;
+    } else {
+        ctx.reply("❌ You are not the admin of this bot!").catch(e => console.log(e));
+        return false;
+    }
+}
 
 // GitHub से डेटाबेस सिंक करना
 async function syncFromGitHub() {
@@ -36,7 +49,7 @@ async function saveToGitHub() {
     } catch (e) { console.log("GitHub Save Error"); }
 }
 
-// 🟢 Android ऐप से रिक्वेस्ट रिसीव करना 🟢
+// Android ऐप से रिक्वेस्ट रिसीव करना
 app.get('/api/request', async (req, res) => {
     const hwid = req.query.hwid;
     if (!hwid) return res.status(400).send("No HWID");
@@ -47,25 +60,30 @@ app.get('/api/request', async (req, res) => {
         await saveToGitHub();
     }
     
-    // 🌟 वॉटरमार्क यहाँ ऐड किया गया है 🌟
     const msg = `🔔 *NEW REQUEST*\n\n*HWID:* \`${hwid}\`\n\n*Quick Commands:*\n\`/approve ${hwid} 30\`\n\`/ban ${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
     
     bot.telegram.sendMessage(GROUP_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Send Error:", e.message));
     res.send("Requested");
 });
 
-// Telegram Bot Commands
+// ==========================================
+// 🤖 TELEGRAM BOT COMMANDS
+// ==========================================
+
 bot.command('devices', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return;
+    if (!isAdmin(ctx)) return; // Admin Check
+    
     await syncFromGitHub();
-    let msg = "📱 *Devices:*\n\n";
-    for (let id in db.devices) { msg += `\`${id}\` : ${db.devices[id].status}\n`; }
+    let msg = "📱 *Registered Devices:*\n\n";
+    for (let id in db.devices) { 
+        msg += `\`${id}\` : ${db.devices[id].status.toUpperCase()}\n`; 
+    }
     msg += "\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_";
-    ctx.reply(msg, { parse_mode: 'Markdown' });
+    ctx.reply(msg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
 bot.command('approve', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return; 
+    if (!isAdmin(ctx)) return; // Admin Check
     
     const args = ctx.message.text.split(' ');
     if (args.length < 3) return ctx.reply("Usage: /approve <HWID> <Days>");
@@ -79,12 +97,13 @@ bot.command('approve', async (ctx) => {
     db.devices[hwid] = { status: "approved", expiry: expiry };
     await saveToGitHub();
     
-    // 🌟 वॉटरमार्क यहाँ भी ऐड किया गया है 🌟
-    ctx.reply(`✅ Approved \`${hwid}\` for ${days} days.\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' });
+    const successMsg = `✅ *SUCCESSFULLY APPROVED!*\n\n*HWID:* \`${hwid}\`\n*Duration:* ${days} Days\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    ctx.reply(successMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
 bot.command('ban', async (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_ID) return;
+    if (!isAdmin(ctx)) return; // Admin Check
+    
     const hwid = ctx.message.text.split(' ')[1];
     if (!hwid) return ctx.reply("Usage: /ban <HWID>");
     
@@ -93,10 +112,31 @@ bot.command('ban', async (ctx) => {
     db.devices[hwid] = { status: "banned", expiry: 0 };
     await saveToGitHub();
     
-    // 🌟 वॉटरमार्क यहाँ भी ऐड किया गया है 🌟
-    ctx.reply(`🚫 Banned: \`${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`, { parse_mode: 'Markdown' });
+    const banMsg = `🚫 *BANNED SUCCESSFULLY*\n\n*HWID:* \`${hwid}\`\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    ctx.reply(banMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
 });
 
+// Supports both /settings and /setting
+bot.command(['settings', 'setting'], async (ctx) => {
+    if (!isAdmin(ctx)) return; // Admin Check
+    
+    const args = ctx.message.text.split(' ');
+    if (args.length < 3) return ctx.reply("Usage: /settings <title/sub> <text>");
+    
+    await syncFromGitHub();
+    const key = args[1].toLowerCase();
+    const val = args.slice(2).join(' ');
+    
+    if (key === 'title') db.settings.title = val;
+    else if (key === 'sub') db.settings.subtitle = val;
+    else return ctx.reply("❌ Invalid setting. Use 'title' or 'sub'.");
+    
+    await saveToGitHub();
+    const setMsg = `✅ *Setting Updated!*\n*${key.toUpperCase()}:* ${val}\n\n_ᴘᴀɴᴇʟ ʙʏ ᴅᴘᴍᴏᴅꜱ_`;
+    ctx.reply(setMsg, { parse_mode: 'Markdown' }).catch(e => console.log(e));
+});
+
+// Start the server and bot
 syncFromGitHub().then(() => {
     app.listen(PORT, () => console.log("Server Running..."));
     bot.launch();
