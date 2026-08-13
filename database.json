@@ -78,8 +78,8 @@
       "expiry": 1789190439
     },
     "02725c8dda822222": {
-      "status": "pending",
-      "expiry": 0
+      "status": "approved",
+      "expiry": 1789190532
     }
   }
 }
