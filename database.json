@@ -2,7 +2,7 @@
   "settings": {
     "title": "SYSTEM ACCESS",
     "subtitle": "Click below to request admin approval.",
-    "maintenance": false,
+    "maintenance": true,
     "banned_devices": [
       "hacker_hwid_1",
       "hacker_hwid_2"
