@@ -40,6 +40,10 @@
     "3e89f0bcf8e4a57a": {
       "status": "banned",
       "expiry": 0
+    },
+    "6c616451150630d5": {
+      "status": "pending",
+      "expiry": 0
     }
   }
 }
