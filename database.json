@@ -84,6 +84,10 @@
     "70e4d48ecae6665e": {
       "status": "banned",
       "expiry": 0
+    },
+    "a6bfb85caa3e40f5": {
+      "status": "pending",
+      "expiry": 0
     }
   }
 }
